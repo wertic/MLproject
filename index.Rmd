@@ -1,0 +1,120 @@
+---
+title: "Physical Aactivity prediction based on data from wearable devices"
+output: html_document
+author: Elena Chernousova
+---
+
+# Summary
+
+The report presents the outcome on reseach of physical activities measured by wrist band. This research has been done for the educational purpose in "Practical Machine Learning class" to excerisee the ability to apply a few models learnt in the class and make conclusions based on metrics of quality.       
+
+# Prerequisites
+
+To correct presentation of graphs and data, the libs "caret" and "ggplot2" should be dowloaded. The data would be taken here: http://groupware.les.inf.puc-rio.br/har  
+
+```{r echo=FALSE,  warning=FALSE}
+library(caret)
+library(ggplot2)
+
+if (!file.exists("training.csv")) {
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "training.csv", method = 'curl')
+}
+if (!file.exists("testing.csv")) {
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", "testing.csv", method = 'curl')
+}
+training <- read.csv("training.csv", stringsAsFactors = F)
+testing <- read.csv("testing.csv", stringsAsFactors = F)
+training$classe = factor(training$classe)
+```
+
+# Explaratory data analysis
+
+The training dataset consists 160 columns and 19622 rows. On first glance, the majority of values are empty :
+
+```{r}
+str(training)
+```
+
+Then, let's check on a distribution of the activity types. The activity types are almost evenly distributed in the training data.
+
+```{r}
+qplot(classe, data=training, fill=I("green"), color=I("green")) + theme_light()
+```
+
+Let's refine the data and strip out the insignificant data, and would concenrate on aggregated values which is denoted in the sataset with the word "total". There are just 4:
+
+```{r}
+signfcolumns <- colnames(training)[grep("^total", colnames(training))]
+featurePlot(training[,signfcolumns], training$classe, plot="pairs")
+```
+
+After it, let's select just high level metrics which start with "roll_...", "pitch_...", "yaw_..." and make the plot to check the possible correlation among them. There is no picture with noticeable indication of correlation. 
+
+```{r}
+cols <- colnames(training)[grep("^[a-z]*_[a-z]*$", colnames(training))][5:16]
+featurePlot(training[,cols], training$classe, plot="pairs")
+```
+
+# Model training
+
+First model is made using the 4 aggregated metrics, the ramdom forests approach and crossvalidation. The number of folds is set to 10 from consideration of computational performance:   
+
+```{r}
+tc <- trainControl(method = "repeatedcv", number = 10)
+model1 <- train(classe ~ ., 
+                data = training[,c(signfcolumns, "classe")],
+                method="rf", 
+                trControl = tc, 
+                preProc = c("center", "scale"))
+model1
+```
+
+The second is made with the same predictors but with the boosted trees.
+```{r}
+model2 <- train(classe ~ ., 
+                data = training[,c(signfcolumns, "classe")], 
+                method="bstTree", 
+                trControl = tc, 
+                preProc = c("center", "scale"))
+model2
+```
+
+The third is made using the high level metrics from the dataset and the random forests approach.
+```{r}
+model3 <- train(classe ~ ., 
+                data = training[,c(cols, "classe")], 
+                method="rf", 
+                trControl = tc, 
+                preProc = c("center", "scale"))
+model3
+```
+
+The last one is made with the same predictors like the previous and the boosted trees and raw preditors.
+
+```{r}
+model4 <- train(classe ~ ., 
+                data = training[,c(cols, "classe")], 
+                method="bstTree", 
+                trControl = tc, 
+                preProc = c("center", "scale"))
+model4
+```
+
+# Model training overview
+
+Looks like the model based on the high level metrics with the random tree apprcoch shows the best results. It's accuracy archived 99% when the model with the boosted trees in the best case close to 0.38.   
+The  dependecy between theoretical accuracy and predictors is shown on the following plot:
+
+```{r}
+plot(model3)
+```
+
+Let's apply the model 3 to the test set: 
+
+```{r}
+predict(model3, newdata=testing[,cols])
+```
+
+# Conclusion
+
+In the research 4 models were built to predict the activity type. 2 of them were done using the random forests approach and 2 with boosted trees. For first two the total metrics were used as the predictors and the rest the high level metrics. Generally, the performence of models were higher on the provided dataset then on the model with the boosted trees. Also, the model with 12 predictors are better then with 4, however, more computational resourse consuming. 
